@@ -36,51 +36,87 @@ loop(Name, Tab, Tuples, Nodes, Waiting) ->
             ts_owner:loop(Name, Tab, Tuples, Nodes, NewWaiting);
 
         {From, {out, Ref, Tuple}} ->
-            {NewTuples, NewWaiting} = handle_out(Tuple, Tuples, Waiting),
-            save_tuples(Tab, NewTuples),
-            From ! {Ref, {ok, Tuple}},
-            ts_owner:loop(Name, Tab, NewTuples, Nodes, NewWaiting);
+            case allowed(From, Nodes) of
+                true ->
+                    {NewTuples, NewWaiting} = handle_out(Tuple, Tuples, Waiting),
+                    save_tuples(Tab, NewTuples),
+                    From ! {Ref, {ok, Tuple}},
+                    ts_owner:loop(Name, Tab, NewTuples, Nodes, NewWaiting);
+                false ->
+                    From ! {Ref, {err, unauthorized}},
+                    ts_owner:loop(Name, Tab, Tuples, Nodes, Waiting)
+            end;
 
         {From, {in, Ref, Pattern}} ->
-            case take_first_match(Pattern, Tuples) of
-                {ok, Tuple, Rest} ->
-                    save_tuples(Tab, Rest),
-                    From ! {Ref, {ok, Tuple}},
-                    ts_owner:loop(Name, Tab, Rest, Nodes, Waiting);
-                not_found ->
-                    NewWaiting = Waiting ++ [{From, Ref, in, Pattern}],
-                    ts_owner:loop(Name, Tab, Tuples, Nodes, NewWaiting)
+            case allowed(From, Nodes) of
+                true ->
+                    case take_first_match(Pattern, Tuples) of
+                        {ok, Tuple, Rest} ->
+                            save_tuples(Tab, Rest),
+                            From ! {Ref, {ok, Tuple}},
+                            ts_owner:loop(Name, Tab, Rest, Nodes, Waiting);
+                        not_found ->
+                            NewWaiting = Waiting ++ [{From, Ref, in, Pattern}],
+                            ts_owner:loop(Name, Tab, Tuples, Nodes, NewWaiting)
+                    end;
+                false ->
+                    From ! {Ref, {err, unauthorized}},
+                    ts_owner:loop(Name, Tab, Tuples, Nodes, Waiting)
             end;
 
         {From, {rd, Ref, Pattern}} ->
-            case read_first_match(Pattern, Tuples) of
-                {ok, Tuple} ->
-                    From ! {Ref, {ok, Tuple}},
-                    ts_owner:loop(Name, Tab, Tuples, Nodes, Waiting);
-                not_found ->
-                    NewWaiting = Waiting ++ [{From, Ref, rd, Pattern}],
-                    ts_owner:loop(Name, Tab, Tuples, Nodes, NewWaiting)
+            case allowed(From, Nodes) of
+                true ->
+                    case read_first_match(Pattern, Tuples) of
+                        {ok, Tuple} ->
+                            From ! {Ref, {ok, Tuple}},
+                            ts_owner:loop(Name, Tab, Tuples, Nodes, Waiting);
+                        not_found ->
+                            NewWaiting = Waiting ++ [{From, Ref, rd, Pattern}],
+                            ts_owner:loop(Name, Tab, Tuples, Nodes, NewWaiting)
+                    end;
+                false ->
+                    From ! {Ref, {err, unauthorized}},
+                    ts_owner:loop(Name, Tab, Tuples, Nodes, Waiting)
             end;
 
         {From, {add_node, Ref, Node}} ->
-            NewNodes =
-                case lists:member(Node, Nodes) of
-                    true -> Nodes;
-                    false -> Nodes ++ [Node]
-                end,
-            save_nodes(Tab, NewNodes),
-            From ! {Ref, ok},
-            ts_owner:loop(Name, Tab, Tuples, NewNodes, Waiting);
+            case allowed(From, Nodes) of
+                true ->
+                    NewNodes =
+                        case lists:member(Node, Nodes) of
+                            true -> Nodes;
+                            false -> Nodes ++ [Node]
+                        end,
+                    save_nodes(Tab, NewNodes),
+                    From ! {Ref, ok},
+                    ts_owner:loop(Name, Tab, Tuples, NewNodes, Waiting);
+                false ->
+                    From ! {Ref, {err, unauthorized}},
+                    ts_owner:loop(Name, Tab, Tuples, Nodes, Waiting)
+            end;
 
         {From, {remove_node, Ref, Node}} ->
-            NewNodes = lists:filter(fun(X) -> X /= Node end, Nodes),
-            save_nodes(Tab, NewNodes),
-            From ! {Ref, ok},
-            ts_owner:loop(Name, Tab, Tuples, NewNodes, Waiting);
+            case allowed(From, Nodes) of
+                true ->
+                    NewNodes = lists:filter(fun(X) -> X /= Node end, Nodes),
+                    save_nodes(Tab, NewNodes),
+                    From ! {Ref, ok},
+                    ts_owner:loop(Name, Tab, Tuples, NewNodes, Waiting);
+                false ->
+                    From ! {Ref, {err, unauthorized}},
+                    ts_owner:loop(Name, Tab, Tuples, Nodes, Waiting)
+            end;
 
         {From, {nodes, Ref}} ->
-            From ! {Ref, Nodes},
-            ts_owner:loop(Name, Tab, Tuples, Nodes, Waiting);
+            case allowed(From, Nodes) of
+                true ->
+                    From ! {Ref, Nodes},
+                    ts_owner:loop(Name, Tab, Tuples, Nodes, Waiting);
+                false ->
+                    From ! {Ref, {err, unauthorized}},
+                    ts_owner:loop(Name, Tab, Tuples, Nodes, Waiting)
+            end;
 
         stop ->
             dets:close(Tab),
@@ -196,3 +232,6 @@ save_tuples(Tab, Tuples) ->
 save_nodes(Tab, Nodes) ->
     dets:insert(Tab, {nodes, Nodes}),
     dets:sync(Tab).
+
+allowed(From, Nodes) ->
+    lists:member(node(From), Nodes).
