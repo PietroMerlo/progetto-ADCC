@@ -1,3 +1,4 @@
+
 -module(ts_supervisor).
 
 -export([start_link/1, init/1, loop/2]).
@@ -22,6 +23,13 @@ init(Name) ->
 
 loop(Name, OwnerPid) ->
     receive
+       
+        {'EXIT', OwnerPid, normal} ->
+            ok;
+
+        {'EXIT', OwnerPid, shutdown} ->
+            ok;
+
         {'EXIT', OwnerPid, _Reason} ->
             {ok, NewOwnerPid} = ts_owner:start(Name),
             loop(Name, NewOwnerPid);

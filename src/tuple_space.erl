@@ -1,10 +1,9 @@
+
 -module(tuple_space).
 
 -export([
     new/1, stop/1,
-    out/2,
-    in/2, in/3,
-    rd/2, rd/3,
+    out/2, in/2, in/3, rd/2, rd/3,
     addNode/2, removeNode/2, nodes/1
 ]).
 
