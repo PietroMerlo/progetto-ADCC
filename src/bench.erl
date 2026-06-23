@@ -12,7 +12,6 @@
 
 run() ->
     io:format("~n--- BENCHMARK START ---~n", []),
-    io:format("Compila prima tuple_space, ts_owner, ts_supervisor e il tuo codice con crash.~n", []),
     cleanup(),
     {OutAvg, OutMin, OutMax} = bench_out(1000),
     cleanup(),
@@ -84,7 +83,7 @@ measure_recovery(I) ->
     {ok, _} = tuple_space:out(Name, {probe, I}),
     T1 = erlang:monotonic_time(microsecond),
     crash_owner(Name),
-    wait_until_responsive(Name, {probe, I}),
+    rd_until_responsive(Name, {probe, I}),
     T2 = erlang:monotonic_time(microsecond),
     _ = catch tuple_space:stop(Name),
     T2 - T1.
@@ -114,19 +113,19 @@ cleanup() ->
 recovery_name(I) ->
     list_to_atom("tsrec_" ++ integer_to_list(I)).
 
-wait_until_responsive(Name, Tuple) ->
+rd_until_responsive(Name, Tuple) ->
     case catch tuple_space:rd(Name, Tuple, 10) of
         {ok, Tuple} ->
             ok;
         {err, timeout} ->
             timer:sleep(1),
-            wait_until_responsive(Name, Tuple);
+            rd_until_responsive(Name, Tuple);
         {'EXIT', _} ->
             timer:sleep(1),
-            wait_until_responsive(Name, Tuple);
+            rd_until_responsive(Name, Tuple);
         _ ->
             timer:sleep(1),
-            wait_until_responsive(Name, Tuple)
+            rd_until_responsive(Name, Tuple)
     end.
 
 crash_owner(Name) ->
