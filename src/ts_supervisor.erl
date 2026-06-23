@@ -23,23 +23,16 @@ init(Name) ->
 
 loop(Name, OwnerPid) ->
     receive
-       
-        {'EXIT', OwnerPid, normal} ->
-            ok;
-
-        {'EXIT', OwnerPid, shutdown} ->
-            ok;
-
+        {'EXIT', OwnerPid, normal} -> ok;
+        {'EXIT', OwnerPid, shutdown} -> ok;
         {'EXIT', OwnerPid, _Reason} ->
             {ok, NewOwnerPid} = ts_owner:start(Name),
             loop(Name, NewOwnerPid);
-
         {stop, From} ->
             OwnerPid ! stop,
             global:unregister_name({ts, Name}),
             unregister(Name),
             From ! {reply, ok};
-
         Msg ->
             OwnerPid ! Msg,
             loop(Name, OwnerPid)

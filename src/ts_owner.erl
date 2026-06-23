@@ -1,11 +1,7 @@
 
 -module(ts_owner).
 
--export([
-    start/1,
-    init/1,
-    loop/5
-]).
+-export([ start/1, init/1, loop/5 ]).
 
 start(Name) ->
     Pid = spawn_link(?MODULE, init, [Name]),
@@ -123,6 +119,9 @@ loop(Name, Tab, Tuples, Nodes, Waiting) ->
             dets:close(Tab),
             ok;
 
+        {From, crash} ->
+            From ! {reply, crashing},
+            exit(crash);
         _Msg ->
             ts_owner:loop(Name, Tab, Tuples, Nodes, Waiting)
     end.
@@ -195,8 +194,7 @@ take_first_match(Pattern, [H | T]) ->
             end
     end.
 
-match(Pattern, Tuple)
-when is_tuple(Pattern), is_tuple(Tuple), tuple_size(Pattern) == tuple_size(Tuple) ->
+match(Pattern, Tuple) when is_tuple(Pattern), is_tuple(Tuple), tuple_size(Pattern) == tuple_size(Tuple) ->
     match_list(tuple_to_list(Pattern), tuple_to_list(Tuple));
 
 match(_, _) ->
